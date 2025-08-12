@@ -4,10 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Laboratorio de la Escala Menor Melódica</title>
-  <!-- Enlaces a Tailwind CSS y Tone.js -->
+  <!-- Enlaces a Tailwind CSS, Tone.js y html2canvas -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdn.jsdelivr.net/npm/tone@14.7.58/build/Tone.js"></script>
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Roboto+Mono:wght@400;700&display=swap');
     
@@ -108,6 +109,9 @@
         </button>
         <button id="save-lick-btn" class="flex items-center px-4 py-2 rounded-full transition-all duration-300 bg-teal-600 hover:bg-teal-700 text-white focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed">
           <i data-lucide="save" class="mr-2"></i> Guardar Lick
+        </button>
+        <button id="export-lick-btn" class="flex items-center px-4 py-2 rounded-full transition-all duration-300 bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed">
+          <i data-lucide="download" class="mr-2"></i> Exportar
         </button>
       </div>
       
@@ -266,12 +270,13 @@
 
     function renderRandomLick() {
       const lickDisplay = document.getElementById('random-lick-display');
-      const playBtn = document.getElementById('play-lick-btn');
       const saveBtn = document.getElementById('save-lick-btn');
+      const exportBtn = document.getElementById('export-lick-btn');
 
       if (randomLick.length === 0) {
         lickDisplay.innerHTML = '';
         if (saveBtn) saveBtn.disabled = true;
+        if (exportBtn) exportBtn.disabled = true;
         return;
       }
 
@@ -297,6 +302,7 @@
 
       // Desactivar el botón de guardar si no hay lick
       document.getElementById('save-lick-btn').disabled = false;
+      document.getElementById('export-lick-btn').disabled = false;
       
       // Añadir listener al botón de reproducir
       document.getElementById('play-lick-btn').addEventListener('click', () => {
@@ -312,7 +318,7 @@
         const lickElement = document.createElement('div');
         lickElement.className = 'bg-gray-800 p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between shadow-md';
         lickElement.innerHTML = `
-          <div class="flex-grow">
+          <div class="flex-grow" id="saved-lick-content-${lickIndex}">
             <p class="text-lg font-bold text-teal-300 mb-2">
               ${lick.root}${SCALE_RELATIONSHIPS[lick.chord].title.slice(1)} Lick
             </p>
@@ -330,6 +336,9 @@
               <i data-lucide="play" class="play-icon"></i>
               <i data-lucide="stop-circle" class="stop-icon hidden"></i>
             </button>
+            <button id="export-saved-lick-btn-${lickIndex}" class="p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-400">
+              <i data-lucide="download"></i>
+            </button>
             <button id="delete-saved-lick-btn-${lickIndex}" class="p-3 bg-red-600 hover:bg-red-700 text-white rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-red-400">
               <i data-lucide="trash-2"></i>
             </button>
@@ -340,12 +349,15 @@
         // Vuelve a crear los íconos de Lucide
         lucide.createIcons();
 
-        // Añadir listeners para los botones de reproducir y borrar
+        // Añadir listeners para los botones de reproducir, borrar y exportar
         document.getElementById(`play-saved-lick-btn-${lickIndex}`).addEventListener('click', () => {
           playLick(lick.notes, lickIndex);
         });
         document.getElementById(`delete-saved-lick-btn-${lickIndex}`).addEventListener('click', () => {
           deleteSavedLick(lickIndex);
+        });
+        document.getElementById(`export-saved-lick-btn-${lickIndex}`).addEventListener('click', () => {
+          exportLickAsImage(`saved-lick-content-${lickIndex}`);
         });
       });
     }
@@ -450,6 +462,50 @@
       savedLicks.splice(indexToDelete, 1);
       localStorage.setItem('savedMelodicLicks', JSON.stringify(savedLicks));
       renderSavedLicks();
+    }
+
+    // Función de exportar como imagen PNG
+    function exportLickAsImage(lickId) {
+      const lickElement = document.getElementById(lickId);
+      if (!lickElement) {
+          console.error(`Elemento con id "${lickId}" no encontrado.`);
+          return;
+      }
+      
+      // html2canvas no captura el fondo del body, por lo que creamos un div temporal
+      const tempWrapper = document.createElement('div');
+      tempWrapper.style.backgroundColor = '#1f2937'; // Color de fondo del body
+      tempWrapper.style.padding = '20px';
+      tempWrapper.style.borderRadius = '1rem';
+      tempWrapper.style.display = 'inline-block';
+      
+      const clone = lickElement.cloneNode(true);
+      clone.style.width = lickElement.offsetWidth + 'px';
+      clone.style.height = lickElement.offsetHeight + 'px';
+      
+      // Aplicar estilos del contenedor
+      const containerStyles = window.getComputedStyle(lickElement.parentElement);
+      clone.style.backgroundColor = containerStyles.backgroundColor;
+      clone.style.padding = containerStyles.padding;
+      clone.style.borderRadius = containerStyles.borderRadius;
+      
+      tempWrapper.appendChild(clone);
+      document.body.appendChild(tempWrapper);
+      
+      html2canvas(tempWrapper, {
+          backgroundColor: '#111827', // Fondo del elemento padre, para que el resultado sea consistente
+          scale: 2 // Escala para una mejor resolución
+      }).then(canvas => {
+          const image = canvas.toDataURL('image/png');
+          const link = document.createElement('a');
+          link.download = `lick-melodico.png`;
+          link.href = image;
+          link.click();
+          tempWrapper.remove();
+      }).catch(err => {
+          console.error('Error al exportar la imagen:', err);
+          tempWrapper.remove();
+      });
     }
     
     // Funciones de actualización de UI
@@ -569,6 +625,11 @@
       // Añadir listeners para los botones de la sección de lick aleatorio
       document.getElementById('generate-lick-btn').addEventListener('click', generateLick);
       document.getElementById('save-lick-btn').addEventListener('click', saveCurrentLick);
+      document.getElementById('export-lick-btn').addEventListener('click', () => {
+          if (randomLick.length > 0) {
+              exportLickAsImage('random-lick-notes-container');
+          }
+      });
       
       // Renderizar la UI inicial
       updateScaleAndChordDisplay(rootSelect.value, chordSelect.value);
