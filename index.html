@@ -1,569 +1,580 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Music2, Scale, Play, StopCircle, Dice3, Save, Trash2 } from 'lucide-react';
-import * as Tone from 'tone';
-
-// Array de notas para el selector de raíz (escala cromática)
-const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-
-// Fórmulas de acordes en semitonos (relativas a la raíz)
-const CHORD_FORMULAS = {
-  maj7: [0, 4, 7, 11],
-  m7: [0, 3, 7, 10],
-  '7(b9)': [0, 4, 7, 10],
-  '7(Alt)': [0, 4, 7, 10],
-  '7(#11)': [0, 4, 7, 10],
-  'm7(b5)': [0, 3, 6, 10],
-};
-
-// Relaciones entre acordes y escalas menor melódicas (relativas a la raíz del acorde)
-const SCALE_RELATIONSHIPS = {
-  maj7: { 
-    relation: 'escala menor melódica sobre la 6ta',
-    offset: 9,
-    title: 'Xmaj7',
-  },
-  m7: {
-    relation: 'escala menor melódica sobre la raíz',
-    offset: 0,
-    title: 'Xm7',
-  },
-  '7(b9)': {
-    relation: 'escala menor melódica sobre la b7',
-    offset: 10,
-    title: 'X7(b9)',
-  },
-  '7(Alt)': {
-    relation: 'escala menor melódica sobre la b2',
-    offset: 1,
-    title: 'X7(Alt)',
-  },
-  '7(#11)': {
-    relation: 'escala menor melódica sobre la 5 justa',
-    offset: 7,
-    title: 'X7(#11)',
-  },
-  'm7(b5)': {
-    relation: 'escala menor melódica sobre el b3',
-    offset: 3,
-    title: 'Xm7(b5)',
-  },
-};
-
-// Fórmula de la escala menor melódica en semitonos (relativa a su raíz)
-const MELODIC_MINOR_FORMULA = [0, 2, 3, 5, 7, 9, 11];
-
-// Mapa de notas para cada clave, incluyendo las notas correctas (sostenidos y bemoles)
-const KEY_NOTE_MAP = {
-  'C': ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'],
-  'C#': ['C#', 'D', 'D#', 'E', 'E#', 'F#', 'G', 'G#', 'A', 'A#', 'B', 'B#'],
-  'Db': ['Db', 'Ebb', 'Eb', 'Fb', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B', 'C'],
-  'D': ['D', 'Eb', 'E', 'F', 'F#', 'G', 'G#', 'A', 'Bb', 'B', 'C', 'C#'],
-  'D#': ['D#', 'E', 'E#', 'F#', 'F##', 'G#', 'A', 'A#', 'B', 'B#', 'C#', 'C##'],
-  'Eb': ['Eb', 'Fb', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B', 'C', 'Db', 'D'],
-  'E': ['E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B', 'C', 'C#', 'D', 'D#'],
-  'F': ['F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B', 'C', 'Db', 'D', 'Eb', 'E'],
-  'F#': ['F#', 'G', 'G#', 'A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'E#'],
-  'Gb': ['Gb', 'Abb', 'Ab', 'Bbb', 'Bb', 'Cb', 'C', 'Db', 'D', 'Eb', 'E', 'F'],
-  'G': ['G', 'Ab', 'A', 'Bb', 'B', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'F#'],
-  'G#': ['G#', 'A', 'A#', 'B', 'B#', 'C#', 'D', 'D#', 'E', 'E#', 'F#', 'F##'],
-  'Ab': ['Ab', 'Bbb', 'Bb', 'Cb', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G'],
-  'A': ['A', 'Bb', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'],
-  'A#': ['A#', 'B', 'B#', 'C#', 'C##', 'D#', 'E', 'E#', 'F#', 'F##', 'G#', 'G##'],
-  'Bb': ['Bb', 'Cb', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A'],
-  'B': ['B', 'C', 'C#', 'D', 'D#', 'E', 'E#', 'F#', 'G', 'G#', 'A', 'A#'],
-};
-
-// Mapeo de notas a semitonos para un cálculo de intervalos robusto
-const NOTE_TO_SEMITONE_MAP = {
-  'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'Fb': 4, 'E#': 5, 'F': 5, 'F#': 6,
-  'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11, 'Cb': 11, 'B#': 0,
-  'Ebb': 2, 'F##': 7, 'Abb': 7, 'Bbb': 9, 'Dbb': 0, 'G##': 10,
-};
-
-// Mapeo de semitonos a nombres de intervalos, específico para cada tipo de acorde
-const INTERVAL_MAPS_BY_CHORD_TYPE = {
-  'maj7': {
-    0: '1', 2: '2', 4: '3', 6: '#11', 8: '#5', 9: '6', 11: '7'
-  },
-  'm7': {
-    0: '1', 2: '2', 3: 'b3', 5: '4', 7: '5', 9: '6', 11: '7'
-  },
-  '7(b9)': {
-    0: '1', 1: 'b9', 3: '#9', 5: '4', 7: '5', 9: '13', 10: 'b7'
-  },
-  '7(Alt)': {
-    0: '1', 1: 'b9', 3: '#9', 4: '3', 6: 'b5', 8: 'b13', 10: 'b7'
-  },
-  '7(#11)': {
-    0: '1', 2: '2', 4: '3', 6: '#11', 7: '5', 9: '13', 10: 'b7'
-  },
-  'm7(b5)': {
-    0: '1', 2: '2', 3: 'b3', 5: '4', 6: 'b5', 8: 'b6', 10: 'b7'
-  }
-};
-
-// Función para obtener las notas correctamente deletreadas
-const getCorrectlySpelledNotes = (root, intervals) => {
-  const rootKeyMap = KEY_NOTE_MAP[root];
-  if (!rootKeyMap) return [];
-  return intervals.map(semitone => rootKeyMap[semitone % 12]);
-};
-
-// Función para obtener la raíz de una escala con el deletreo correcto
-const getCorrectlySpelledScaleRoot = (root, offset) => {
-  const rootKeyMap = KEY_NOTE_MAP[root];
-  if (!rootKeyMap) return null;
-  return rootKeyMap[offset % 12];
-};
-
-// Función para obtener el nombre del intervalo según el tipo de acorde, la raíz y la nota
-const getIntervalName = (chordType, rootNote, targetNote) => {
-  const rootSemitone = NOTE_TO_SEMITONE_MAP[rootNote];
-  const targetSemitone = NOTE_TO_SEMITONE_MAP[targetNote];
-
-  if (rootSemitone === undefined || targetSemitone === undefined) {
-    return 'Error';
-  }
-
-  let semitoneOffset = (targetSemitone - rootSemitone + 12) % 12;
-
-  const intervalMap = INTERVAL_MAPS_BY_CHORD_TYPE[chordType];
-  return intervalMap[semitoneOffset] || 'Error';
-};
-
-// Función para convertir notas enarmónicas a su forma más común
-const getEnharmonicNote = (note) => {
-  const enharmonicMap = {
-    'Fb': 'E',
-    'Cb': 'B',
-    'E#': 'F',
-    'B#': 'C'
-  };
-  return enharmonicMap[note] || note;
-};
-
-// Componente principal de la aplicación
-export default function App() {
-  const [selectedRoot, setSelectedRoot] = useState('C');
-  const [selectedChordType, setSelectedChordType] = useState('maj7');
-  const [isLickPlaying, setIsLickPlaying] = useState(false);
-  const [randomLick, setRandomLick] = useState([]);
-  const [randomLickIntervals, setRandomLickIntervals] = useState([]);
-  const [currentPlayingNoteIndex, setCurrentPlayingNoteIndex] = useState(null);
-  const [savedLicks, setSavedLicks] = useState([]);
-  const [currentLickPlaying, setCurrentLickPlaying] = useState(null);
-
-  const synth = useRef(null);
-  const reverb = useRef(null);
-  const chorus = useRef(null);
-  const lickSequenceRef = useRef(null);
-  
-  // Cargar licks guardados de localStorage al inicio
-  useEffect(() => {
-    const storedLicks = localStorage.getItem('savedMelodicLicks');
-    if (storedLicks) {
-      setSavedLicks(JSON.parse(storedLicks));
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laboratorio de la Escala Menor Melódica</title>
+  <!-- Enlaces a Tailwind CSS y Tone.js -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tone@14.7.58/build/Tone.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Roboto+Mono:wght@400;700&display=swap');
+    
+    body {
+      font-family: 'Inter', sans-serif;
     }
-  }, []);
-
-  // Nuevo useEffect para generar un lick automáticamente al cambiar la raíz o el tipo de acorde
-  useEffect(() => {
-    generateLick();
-  }, [selectedRoot, selectedChordType]); // Dependencias: se ejecuta al cambiar la raíz o el tipo de acorde
-
-  useEffect(() => {
-    if (!synth.current) {
-      // Configuración de un sintetizador más cálido e inspirador
-      synth.current = new Tone.PolySynth(Tone.FMSynth, {
-        envelope: {
-          attack: 0.05,
-          decay: 0.5,
-          sustain: 0.2,
-          release: 0.1
-        },
-        oscillator: {
-          type: "sine"
+    
+    .font-mono {
+      font-family: 'Roboto Mono', monospace;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.6s ease-out;
+    }
+    .animate-slide-up {
+      animation: slideUp 0.6s ease-out 0.2s forwards;
+      opacity: 0;
+    }
+    .animate-pulse {
+        animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse {
+        0%, 100% {
+            border-color: #fcd34d;
+            box-shadow: 0 0 5px #fcd34d;
         }
-      }).toDestination();
+        50% {
+            border-color: rgba(252, 211, 77, 0.4);
+            box-shadow: 0 0 15px rgba(252, 211, 77, 0.8);
+        }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
+  <div class="bg-gray-800 shadow-2xl rounded-3xl p-8 max-w-4xl w-full flex flex-col space-y-8 animate-fade-in">
+    <h1 class="text-4xl font-extrabold text-center text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500 mb-2">
+      Laboratorio de la Escala Menor Melódica
+    </h1>
+    <p class="text-center text-gray-400 max-w-xl mx-auto">
+      Selecciona una nota raíz y un tipo de acorde para ver la escala menor melódica que puedes usar para improvisar.
+    </p>
+
+    <div class="grid md:grid-cols-2 gap-6">
+      <!-- Selector de Nota Raíz -->
+      <div class="flex flex-col items-center">
+        <label for="root-note" class="text-xl font-bold mb-2 text-teal-300 flex items-center">
+          <i data-lucide="music-2" class="mr-2"></i> Nota Raíz
+        </label>
+        <div class="relative w-full">
+          <select id="root-note" class="w-full bg-gray-700 text-white border-none rounded-xl p-3 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer">
+            <!-- Opciones generadas por JavaScript -->
+          </select>
+          <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
+            <i data-lucide="chevron-down" size="20"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selector de Tipo de Acorde -->
+      <div class="flex flex-col items-center">
+        <label for="chord-type" class="text-xl font-bold mb-2 text-teal-300 flex items-center">
+          <i data-lucide="scale" class="mr-2"></i> Tipo de Acorde
+        </label>
+        <div class="relative w-full">
+          <select id="chord-type" class="w-full bg-gray-700 text-white border-none rounded-xl p-3 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer">
+            <!-- Opciones generadas por JavaScript -->
+          </select>
+          <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
+            <i data-lucide="chevron-down" size="20"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sección de Resultados -->
+    <div id="results-section" class="bg-gray-700 p-6 rounded-2xl mt-8 shadow-inner animate-slide-up">
+      <!-- Contenido generado por JavaScript -->
+    </div>
+
+    <!-- Sección de Lick Aleatorio -->
+    <div id="random-lick-section" class="bg-gray-700 p-6 rounded-2xl mt-8 shadow-inner animate-slide-up">
+      <div class="flex justify-center items-center mb-4 space-x-2">
+        <h3 class="text-3xl font-extrabold text-white">
+          Lick Aleatorio
+        </h3>
+      </div>
+      <div class="flex justify-center mb-4 space-x-4">
+        <button id="generate-lick-btn" class="flex items-center px-4 py-2 rounded-full transition-all duration-300 bg-purple-600 hover:bg-purple-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-400">
+          <i data-lucide="dice-3" class="mr-2"></i> Generar Nuevo Lick
+        </button>
+        <button id="save-lick-btn" class="flex items-center px-4 py-2 rounded-full transition-all duration-300 bg-teal-600 hover:bg-teal-700 text-white focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:bg-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed">
+          <i data-lucide="save" class="mr-2"></i> Guardar Lick
+        </button>
+      </div>
       
-      // Añadir efectos de reverberación y coro para un sonido más profundo y "inspirador"
-      reverb.current = new Tone.Reverb({
-        decay: 3,
-        preDelay: 0.01,
-        wet: 0.3
-      }).toDestination();
-      
-      chorus.current = new Tone.Chorus({
-        frequency: 1.5,
-        delayTime: 3.5,
-        depth: 0.7,
-        type: 'triangle',
-        wet: 0.5
-      }).toDestination();
-      
-      // Conectar el sintetizador a los efectos
-      synth.current.connect(reverb.current);
-      synth.current.connect(chorus.current);
+      <div id="random-lick-display" class="flex flex-col items-center">
+        <!-- Lick aleatorio generado por JavaScript -->
+      </div>
+    </div>
+
+    <!-- Sección de Licks Guardados -->
+    <div id="saved-licks-section" class="bg-gray-700 p-6 rounded-2xl mt-8 shadow-inner animate-slide-up">
+      <h3 class="text-3xl font-extrabold text-white text-center mb-4">
+        Licks Guardados
+      </h3>
+      <div id="saved-licks-container" class="flex flex-col space-y-6">
+        <!-- Licks guardados generados por JavaScript -->
+      </div>
+    </div>
+    
+    <!-- Créditos del desarrollador -->
+    <div class="mt-8 text-center text-gray-500 text-sm">
+      <p>Creado por Juan Miguel Rios Redondo</p>
+    </div>
+  </div>
+  
+  <script>
+    // Inicializar los iconos de Lucide
+    lucide.createIcons();
+
+    // Variables globales
+    let synth = null;
+    let reverb = null;
+    let chorus = null;
+    let lickSequence = null;
+    let isLickPlaying = false;
+    let currentPlayingNoteIndex = null;
+    let currentLickPlayingIndex = null;
+    let randomLick = [];
+    let randomLickIntervals = [];
+    let savedLicks = [];
+
+    // Constantes musicales
+    const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const CHORD_FORMULAS = {
+      maj7: [0, 4, 7, 11],
+      m7: [0, 3, 7, 10],
+      '7(b9)': [0, 4, 7, 10],
+      '7(Alt)': [0, 4, 7, 10],
+      '7(#11)': [0, 4, 7, 10],
+      'm7(b5)': [0, 3, 6, 10],
+    };
+    const SCALE_RELATIONSHIPS = {
+      maj7: { relation: 'escala menor melódica sobre la 6ta', offset: 9, title: 'Xmaj7' },
+      m7: { relation: 'escala menor melódica sobre la raíz', offset: 0, title: 'Xm7' },
+      '7(b9)': { relation: 'escala menor melódica sobre la b7', offset: 10, title: 'X7(b9)' },
+      '7(Alt)': { relation: 'escala menor melódica sobre la b2', offset: 1, title: 'X7(Alt)' },
+      '7(#11)': { relation: 'escala menor melódica sobre la 5 justa', offset: 7, title: 'X7(#11)' },
+      'm7(b5)': { relation: 'escala menor melódica sobre el b3', offset: 3, title: 'Xm7(b5)' },
+    };
+    const MELODIC_MINOR_FORMULA = [0, 2, 3, 5, 7, 9, 11];
+    const KEY_NOTE_MAP = {
+      'C': ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'],
+      'C#': ['C#', 'D', 'D#', 'E', 'E#', 'F#', 'G', 'G#', 'A', 'A#', 'B', 'B#'],
+      'Db': ['Db', 'Ebb', 'Eb', 'Fb', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B', 'C'],
+      'D': ['D', 'Eb', 'E', 'F', 'F#', 'G', 'G#', 'A', 'Bb', 'B', 'C', 'C#'],
+      'D#': ['D#', 'E', 'E#', 'F#', 'F##', 'G#', 'A', 'A#', 'B', 'B#', 'C#', 'C##'],
+      'Eb': ['Eb', 'Fb', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B', 'C', 'Db', 'D'],
+      'E': ['E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B', 'C', 'C#', 'D', 'D#'],
+      'F': ['F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B', 'C', 'Db', 'D', 'Eb', 'E'],
+      'F#': ['F#', 'G', 'G#', 'A', 'A#', 'B', 'C', 'C#', 'D', 'D#', 'E', 'E#'],
+      'Gb': ['Gb', 'Abb', 'Ab', 'Bbb', 'Bb', 'Cb', 'C', 'Db', 'D', 'Eb', 'E', 'F'],
+      'G': ['G', 'Ab', 'A', 'Bb', 'B', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'F#'],
+      'G#': ['G#', 'A', 'A#', 'B', 'B#', 'C#', 'D', 'D#', 'E', 'E#', 'F#', 'F##'],
+      'Ab': ['Ab', 'Bbb', 'Bb', 'Cb', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G'],
+      'A': ['A', 'Bb', 'B', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#'],
+      'A#': ['A#', 'B', 'B#', 'C#', 'C##', 'D#', 'E', 'E#', 'F#', 'F##', 'G#', 'G##'],
+      'Bb': ['Bb', 'Cb', 'C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A'],
+      'B': ['B', 'C', 'C#', 'D', 'D#', 'E', 'E#', 'F#', 'G', 'G#', 'A', 'A#'],
+    };
+    const NOTE_TO_SEMITONE_MAP = {
+      'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'Fb': 4, 'E#': 5, 'F': 5, 'F#': 6,
+      'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11, 'Cb': 11, 'B#': 0,
+      'Ebb': 2, 'F##': 7, 'Abb': 7, 'Bbb': 9, 'Dbb': 0, 'G##': 10,
+    };
+    const INTERVAL_MAPS_BY_CHORD_TYPE = {
+      'maj7': { 0: '1', 2: '2', 4: '3', 6: '#11', 8: '#5', 9: '6', 11: '7' },
+      'm7': { 0: '1', 2: '2', 3: 'b3', 5: '4', 7: '5', 9: '6', 11: '7' },
+      '7(b9)': { 0: '1', 1: 'b9', 3: '#9', 5: '4', 7: '5', 9: '13', 10: 'b7' },
+      '7(Alt)': { 0: '1', 1: 'b9', 3: '#9', 4: '3', 6: 'b5', 8: 'b13', 10: 'b7' },
+      '7(#11)': { 0: '1', 2: '2', 4: '3', 6: '#11', 7: '5', 9: '13', 10: 'b7' },
+      'm7(b5)': { 0: '1', 2: '2', 3: 'b3', 5: '4', 6: 'b5', 8: 'b6', 10: 'b7' }
+    };
+    const ENHARMONIC_MAP = { 'Fb': 'E', 'Cb': 'B', 'E#': 'F', 'B#': 'C' };
+
+    // Funciones de utilidad para lógica musical
+    function getCorrectlySpelledNotes(root, intervals) {
+      const rootKeyMap = KEY_NOTE_MAP[root];
+      if (!rootKeyMap) return [];
+      return intervals.map(semitone => rootKeyMap[semitone % 12]);
     }
 
-    return () => {
-      if (synth.current) {
-        synth.current.dispose();
+    function getCorrectlySpelledScaleRoot(root, offset) {
+      const rootKeyMap = KEY_NOTE_MAP[root];
+      if (!rootKeyMap) return null;
+      return rootKeyMap[offset % 12];
+    }
+
+    function getIntervalName(chordType, rootNote, targetNote) {
+      const rootSemitone = NOTE_TO_SEMITONE_MAP[rootNote];
+      const targetSemitone = NOTE_TO_SEMITONE_MAP[targetNote];
+      if (rootSemitone === undefined || targetSemitone === undefined) return 'Error';
+      const semitoneOffset = (targetSemitone - rootSemitone + 12) % 12;
+      const intervalMap = INTERVAL_MAPS_BY_CHORD_TYPE[chordType];
+      return intervalMap[semitoneOffset] || 'Error';
+    }
+
+    function getEnharmonicNote(note) {
+      return ENHARMONIC_MAP[note] || note;
+    }
+
+    // Funciones de renderizado UI
+    function updateScaleAndChordDisplay(selectedRoot, selectedChordType) {
+      const relationship = SCALE_RELATIONSHIPS[selectedChordType];
+      const chordNotes = getCorrectlySpelledNotes(selectedRoot, CHORD_FORMULAS[selectedChordType]);
+      const melodicMinorRootNote = getCorrectlySpelledScaleRoot(selectedRoot, relationship.offset);
+      const melodicMinorNotes = melodicMinorRootNote ? getCorrectlySpelledNotes(melodicMinorRootNote, MELODIC_MINOR_FORMULA).map(getEnharmonicNote) : [];
+      
+      const resultsSection = document.getElementById('results-section');
+      resultsSection.innerHTML = `
+        <div class="flex justify-center items-center mb-4 space-x-2">
+          <h2 class="text-3xl font-extrabold text-white">
+            ${selectedRoot}${relationship.title.slice(1)}
+          </h2>
+        </div>
+        <p class="text-center text-lg text-gray-300 mb-4 font-semibold">
+          Acorde: <span class="font-mono text-xl text-yellow-300">${chordNotes.join(', ')}</span>
+        </p>
+        <hr class="border-gray-600 my-4" />
+        <p class="text-center text-lg text-gray-300 mb-2">
+          Usa la escala:
+        </p>
+        <p class="text-center text-2xl font-bold text-blue-300 mb-2">
+          ${getEnharmonicNote(melodicMinorRootNote)} menor melódica
+        </p>
+        <p class="text-center text-sm text-gray-400 italic">
+          (${relationship.relation})
+        </p>
+        <div class="flex justify-center flex-wrap gap-4 mt-4">
+          ${melodicMinorNotes.map(note => `
+            <div class="flex flex-col items-center p-2 rounded-lg border-2 border-transparent">
+              <span class="font-mono text-2xl font-bold text-green-300">${note}</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderRandomLick() {
+      const lickDisplay = document.getElementById('random-lick-display');
+      const playBtn = document.getElementById('play-lick-btn');
+      const saveBtn = document.getElementById('save-lick-btn');
+
+      if (randomLick.length === 0) {
+        lickDisplay.innerHTML = '';
+        if (saveBtn) saveBtn.disabled = true;
+        return;
       }
-      if (reverb.current) {
-        reverb.current.dispose();
+
+      lickDisplay.innerHTML = `
+        <div class="flex justify-center flex-wrap gap-4 mt-4" id="random-lick-notes-container">
+          ${randomLick.map((note, index) => `
+            <div id="random-note-${index}" class="flex flex-col items-center p-2 rounded-lg border-2 transition-all duration-300 border-transparent">
+              <span class="font-mono text-2xl font-bold text-yellow-300">${note}</span>
+              <span class="text-sm text-gray-400">${randomLickIntervals[index]}</span>
+            </div>
+          `).join('')}
+        </div>
+        <div class="flex justify-center mt-4">
+          <button id="play-lick-btn" class="flex items-center px-4 py-2 rounded-full transition-all duration-300 bg-pink-600 hover:bg-pink-700 text-white focus:outline-none focus:ring-2 focus:ring-pink-400">
+            <i data-lucide="play" class="mr-2 play-icon"></i>
+            <i data-lucide="stop-circle" class="mr-2 stop-icon hidden"></i>
+            Tocar Lick
+          </button>
+        </div>
+      `;
+      // Vuelve a crear los íconos de Lucide
+      lucide.createIcons();
+
+      // Desactivar el botón de guardar si no hay lick
+      document.getElementById('save-lick-btn').disabled = false;
+      
+      // Añadir listener al botón de reproducir
+      document.getElementById('play-lick-btn').addEventListener('click', () => {
+        playLick(randomLick);
+      });
+    }
+    
+    function renderSavedLicks() {
+      const container = document.getElementById('saved-licks-container');
+      container.innerHTML = savedLicks.length > 0 ? '' : '<p class="text-center text-gray-400">No hay licks guardados.</p>';
+      
+      savedLicks.forEach((lick, lickIndex) => {
+        const lickElement = document.createElement('div');
+        lickElement.className = 'bg-gray-800 p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between shadow-md';
+        lickElement.innerHTML = `
+          <div class="flex-grow">
+            <p class="text-lg font-bold text-teal-300 mb-2">
+              ${lick.root}${SCALE_RELATIONSHIPS[lick.chord].title.slice(1)} Lick
+            </p>
+            <div id="saved-lick-notes-${lickIndex}" class="flex flex-wrap gap-2">
+              ${lick.notes.map((note, noteIndex) => `
+                <div id="saved-note-${lickIndex}-${noteIndex}" class="flex flex-col items-center p-1 rounded-md border-2 transition-all duration-300 border-transparent">
+                  <span class="font-mono text-xl text-yellow-300">${note}</span>
+                  <span class="text-xs text-gray-400">${lick.intervals[noteIndex]}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          <div class="flex space-x-2 mt-4 md:mt-0">
+            <button id="play-saved-lick-btn-${lickIndex}" class="p-3 rounded-full transition-all duration-300 bg-pink-600 hover:bg-pink-700 text-white focus:outline-none focus:ring-2 focus:ring-pink-400">
+              <i data-lucide="play" class="play-icon"></i>
+              <i data-lucide="stop-circle" class="stop-icon hidden"></i>
+            </button>
+            <button id="delete-saved-lick-btn-${lickIndex}" class="p-3 bg-red-600 hover:bg-red-700 text-white rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-red-400">
+              <i data-lucide="trash-2"></i>
+            </button>
+          </div>
+        `;
+        container.appendChild(lickElement);
+
+        // Vuelve a crear los íconos de Lucide
+        lucide.createIcons();
+
+        // Añadir listeners para los botones de reproducir y borrar
+        document.getElementById(`play-saved-lick-btn-${lickIndex}`).addEventListener('click', () => {
+          playLick(lick.notes, lickIndex);
+        });
+        document.getElementById(`delete-saved-lick-btn-${lickIndex}`).addEventListener('click', () => {
+          deleteSavedLick(lickIndex);
+        });
+      });
+    }
+
+    // Funciones principales de la aplicación
+    function stopLick() {
+      if (lickSequence) {
+        lickSequence.dispose();
+        lickSequence = null;
       }
-      if (chorus.current) {
-        chorus.current.dispose();
-      }
-      if (lickSequenceRef.current) lickSequenceRef.current = null;
+      isLickPlaying = false;
+      currentPlayingNoteIndex = null;
+      currentLickPlayingIndex = null;
       Tone.Transport.stop();
       Tone.Transport.cancel(0);
+      updatePlayButtons();
+      updateHighlightedNotes();
+    }
+
+    function generateLick() {
+      stopLick();
+      const selectedRoot = document.getElementById('root-note').value;
+      const selectedChordType = document.getElementById('chord-type').value;
+      const melodicMinorRootNote = getCorrectlySpelledScaleRoot(selectedRoot, SCALE_RELATIONSHIPS[selectedChordType].offset);
+      const melodicMinorNotes = melodicMinorRootNote ? getCorrectlySpelledNotes(melodicMinorRootNote, MELODIC_MINOR_FORMULA).map(getEnharmonicNote) : [];
+      
+      if (melodicMinorNotes.length === 0) return;
+      
+      const availableNotes = [...melodicMinorNotes];
+      const lickLength = Math.floor(Math.random() * 5) + 4;
+      
+      randomLick = [];
+      randomLickIntervals = [];
+
+      const finalLickLength = Math.min(lickLength, availableNotes.length);
+      
+      for (let i = 0; i < finalLickLength; i++) {
+        const randomIndex = Math.floor(Math.random() * availableNotes.length);
+        const noteName = availableNotes[randomIndex];
+        randomLick.push(noteName);
+        const intervalName = getIntervalName(selectedChordType, selectedRoot, noteName);
+        randomLickIntervals.push(intervalName);
+        availableNotes.splice(randomIndex, 1);
+      }
+      
+      renderRandomLick();
+    }
+    
+    async function playLick(lickToPlay, lickIndex = null) {
+      if (isLickPlaying && currentLickPlayingIndex === lickIndex) {
+        stopLick();
+        return;
+      } else if (isLickPlaying) {
+        stopLick();
+      }
+      
+      if (!synth || lickToPlay.length === 0) return;
+      
+      isLickPlaying = true;
+      currentLickPlayingIndex = lickIndex;
+      updatePlayButtons();
+      await Tone.start();
+      Tone.Transport.start();
+
+      const sequenceNotes = lickToPlay.map((note, index) => ({ note: `${note}4`, index }));
+      const noteDuration = '8n';
+
+      lickSequence = new Tone.Sequence((time, { note, index }) => {
+        currentPlayingNoteIndex = index;
+        updateHighlightedNotes();
+        synth.triggerAttackRelease(note, noteDuration, time);
+      }, sequenceNotes, noteDuration);
+      
+      lickSequence.start(0);
+      Tone.Transport.bpm.value = 120;
+      
+      const totalDuration = Tone.Time(noteDuration).toSeconds() * lickToPlay.length;
+      
+      Tone.Transport.scheduleOnce(() => {
+        console.log('Lick finalizado. Deteniendo la reproducción.');
+        stopLick();
+      }, `+${totalDuration}`);
+    }
+
+    function saveCurrentLick() {
+      if (randomLick.length === 0) return;
+      const newLickToSave = {
+        notes: randomLick,
+        intervals: randomLickIntervals,
+        root: document.getElementById('root-note').value,
+        chord: document.getElementById('chord-type').value
+      };
+      savedLicks.push(newLickToSave);
+      localStorage.setItem('savedMelodicLicks', JSON.stringify(savedLicks));
+      renderSavedLicks();
+    }
+
+    function deleteSavedLick(indexToDelete) {
+      if (isLickPlaying && currentLickPlayingIndex === indexToDelete) {
+        stopLick();
+      }
+      savedLicks.splice(indexToDelete, 1);
+      localStorage.setItem('savedMelodicLicks', JSON.stringify(savedLicks));
+      renderSavedLicks();
+    }
+    
+    // Funciones de actualización de UI
+    function updatePlayButtons() {
+      // Botón del lick aleatorio
+      const playRandomBtn = document.getElementById('play-lick-btn');
+      if (playRandomBtn) {
+        const playIcon = playRandomBtn.querySelector('.play-icon');
+        const stopIcon = playRandomBtn.querySelector('.stop-icon');
+        if (isLickPlaying && currentLickPlayingIndex === null) {
+          playRandomBtn.classList.remove('bg-pink-600', 'hover:bg-pink-700');
+          playRandomBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+          playRandomBtn.childNodes[3].nodeValue = 'Detener Lick';
+          playIcon.classList.add('hidden');
+          stopIcon.classList.remove('hidden');
+        } else {
+          playRandomBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+          playRandomBtn.classList.add('bg-pink-600', 'hover:bg-pink-700');
+          playRandomBtn.childNodes[3].nodeValue = 'Tocar Lick';
+          playIcon.classList.remove('hidden');
+          stopIcon.classList.add('hidden');
+        }
+      }
+
+      // Botones de licks guardados
+      savedLicks.forEach((_, index) => {
+        const playBtn = document.getElementById(`play-saved-lick-btn-${index}`);
+        if (playBtn) {
+          const playIcon = playBtn.querySelector('.play-icon');
+          const stopIcon = playBtn.querySelector('.stop-icon');
+          if (isLickPlaying && currentLickPlayingIndex === index) {
+            playBtn.classList.remove('bg-pink-600', 'hover:bg-pink-700');
+            playBtn.classList.add('bg-red-600', 'hover:bg-red-700');
+            playIcon.classList.add('hidden');
+            stopIcon.classList.remove('hidden');
+          } else {
+            playBtn.classList.remove('bg-red-600', 'hover:bg-red-700');
+            playBtn.classList.add('bg-pink-600', 'hover:bg-pink-700');
+            playIcon.classList.remove('hidden');
+            stopIcon.classList.add('hidden');
+          }
+        }
+      });
+    }
+
+    function updateHighlightedNotes() {
+      // Limpiar todas las notas
+      document.querySelectorAll('[id^="random-note-"]').forEach(el => {
+        el.classList.remove('border-yellow-300', 'shadow-md', 'shadow-yellow-500', 'animate-pulse');
+        el.classList.add('border-transparent');
+      });
+      document.querySelectorAll('[id^="saved-note-"]').forEach(el => {
+        el.classList.remove('border-yellow-300', 'shadow-md', 'shadow-yellow-500', 'animate-pulse');
+        el.classList.add('border-transparent');
+      });
+
+      // Iluminar la nota actual
+      if (isLickPlaying && currentPlayingNoteIndex !== null) {
+        let noteElement = null;
+        if (currentLickPlayingIndex === null) {
+          noteElement = document.getElementById(`random-note-${currentPlayingNoteIndex}`);
+        } else {
+          noteElement = document.getElementById(`saved-note-${currentLickPlayingIndex}-${currentPlayingNoteIndex}`);
+        }
+        if (noteElement) {
+          noteElement.classList.add('border-yellow-300', 'shadow-md', 'shadow-yellow-500', 'animate-pulse');
+          noteElement.classList.remove('border-transparent');
+        }
+      }
+    }
+
+    // Inicialización de la aplicación al cargar la página
+    window.onload = function() {
+      // Inicializar el sintetizador y los efectos de audio
+      synth = new Tone.PolySynth(Tone.FMSynth, {
+        envelope: { attack: 0.05, decay: 0.5, sustain: 0.2, release: 0.1 },
+        oscillator: { type: "sine" }
+      }).toDestination();
+      reverb = new Tone.Reverb({ decay: 3, preDelay: 0.01, wet: 0.3 }).toDestination();
+      chorus = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, type: 'triangle', wet: 0.5 }).toDestination();
+      synth.connect(reverb);
+      synth.connect(chorus);
+
+      // Cargar licks guardados de localStorage
+      const storedLicks = localStorage.getItem('savedMelodicLicks');
+      if (storedLicks) {
+        savedLicks = JSON.parse(storedLicks);
+      }
+
+      // Llenar los selectores de notas y acordes
+      const rootSelect = document.getElementById('root-note');
+      NOTES.forEach(note => {
+        const option = document.createElement('option');
+        option.value = note;
+        option.textContent = note;
+        rootSelect.appendChild(option);
+      });
+
+      const chordSelect = document.getElementById('chord-type');
+      Object.keys(SCALE_RELATIONSHIPS).forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = SCALE_RELATIONSHIPS[type].title;
+        chordSelect.appendChild(option);
+      });
+
+      // Añadir listeners para los cambios en los selectores
+      rootSelect.addEventListener('change', () => {
+        updateScaleAndChordDisplay(rootSelect.value, chordSelect.value);
+        generateLick();
+      });
+      chordSelect.addEventListener('change', () => {
+        updateScaleAndChordDisplay(rootSelect.value, chordSelect.value);
+        generateLick();
+      });
+
+      // Añadir listeners para los botones de la sección de lick aleatorio
+      document.getElementById('generate-lick-btn').addEventListener('click', generateLick);
+      document.getElementById('save-lick-btn').addEventListener('click', saveCurrentLick);
+      
+      // Renderizar la UI inicial
+      updateScaleAndChordDisplay(rootSelect.value, chordSelect.value);
+      generateLick();
+      renderSavedLicks();
     };
-  }, []);
-
-  const relationship = SCALE_RELATIONSHIPS[selectedChordType];
-  const chordNotes = getCorrectlySpelledNotes(selectedRoot, CHORD_FORMULAS[selectedChordType]);
-  const melodicMinorRootNote = getCorrectlySpelledScaleRoot(selectedRoot, relationship.offset);
-  const melodicMinorNotes = melodicMinorRootNote ? getCorrectlySpelledNotes(melodicMinorRootNote, MELODIC_MINOR_FORMULA).map(getEnharmonicNote) : [];
-
-  // Función para detener la secuencia del lick
-  const stopLick = () => {
-    if (lickSequenceRef.current) {
-      lickSequenceRef.current.dispose();
-      lickSequenceRef.current = null;
-    }
-    setIsLickPlaying(false);
-    setCurrentPlayingNoteIndex(null);
-    setCurrentLickPlaying(null);
-    Tone.Transport.stop();
-    Tone.Transport.cancel(0);
-  };
-  
-  // Función para generar un lick aleatorio
-  const generateLick = () => {
-    stopLick(); // Detiene cualquier lick en reproducción
-    if (melodicMinorNotes.length === 0) return;
-    const availableNotes = [...melodicMinorNotes];
-    const lickLength = Math.floor(Math.random() * 5) + 4;
-    const newLick = [];
-    const newIntervals = [];
-
-    const finalLickLength = Math.min(lickLength, availableNotes.length);
-
-    for (let i = 0; i < finalLickLength; i++) {
-      const randomIndex = Math.floor(Math.random() * availableNotes.length);
-      const noteName = availableNotes[randomIndex];
-      newLick.push(noteName);
-
-      const intervalName = getIntervalName(selectedChordType, selectedRoot, noteName);
-      newIntervals.push(intervalName);
-
-      availableNotes.splice(randomIndex, 1);
-    }
-    setRandomLick(newLick);
-    setRandomLickIntervals(newIntervals);
-  };
-  
-  // Función para reproducir el lick aleatorio con iluminación
-  const playLick = async (lickToPlay, lickIndex = null) => {
-    if (!synth.current || lickToPlay.length === 0) return;
-    
-    // Si ya hay un lick tocando y es el mismo, lo detenemos
-    if (isLickPlaying && currentLickPlaying === lickIndex) {
-      stopLick();
-      return;
-    } else if (isLickPlaying) {
-      // Si es un lick diferente, detenemos el anterior y empezamos el nuevo
-      stopLick();
-    }
-    
-    setIsLickPlaying(true);
-    setCurrentLickPlaying(lickIndex);
-    await Tone.start();
-    Tone.Transport.start();
-
-    const sequenceNotes = lickToPlay.map((note, index) => ({ note: `${note}4`, index }));
-
-    lickSequenceRef.current = new Tone.Sequence((time, { note, index }) => {
-      setCurrentPlayingNoteIndex(index);
-      synth.current.triggerAttackRelease(note, '8n', time);
-    }, sequenceNotes, '8n');
-    
-    lickSequenceRef.current.start(0);
-    Tone.Transport.bpm.value = 120;
-    
-    const noteDuration = Tone.Time('8n').toSeconds();
-    const durationInSeconds = lickToPlay.length * noteDuration;
-    
-    // Detener la secuencia exactamente al final de la última nota
-    Tone.Transport.scheduleOnce(() => {
-      stopLick();
-    }, `+${durationInSeconds}`);
-  };
-
-  // Función para guardar el lick actual
-  const saveCurrentLick = () => {
-    if (randomLick.length === 0) return;
-    const newLickToSave = {
-      notes: randomLick,
-      intervals: randomLickIntervals,
-      root: selectedRoot,
-      chord: selectedChordType
-    };
-    const updatedLicks = [...savedLicks, newLickToSave];
-    setSavedLicks(updatedLicks);
-    localStorage.setItem('savedMelodicLicks', JSON.stringify(updatedLicks));
-  };
-
-  // Función para eliminar un lick guardado
-  const deleteSavedLick = (indexToDelete) => {
-    const updatedLicks = savedLicks.filter((_, index) => index !== indexToDelete);
-    setSavedLicks(updatedLicks);
-    localStorage.setItem('savedMelodicLicks', JSON.stringify(updatedLicks));
-  };
-
-
-  return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
-      <div className="bg-gray-800 shadow-2xl rounded-3xl p-8 max-w-4xl w-full flex flex-col space-y-8 animate-fade-in">
-        <h1 className="text-4xl font-extrabold text-center text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500 mb-2">
-          Laboratorio de la Escala Menor Melódica
-        </h1>
-        <p className="text-center text-gray-400 max-w-xl mx-auto">
-          Selecciona una nota raíz y un tipo de acorde para ver la escala menor melódica que puedes usar para improvisar.
-        </p>
-
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Selector de Nota Raíz */}
-          <div className="flex flex-col items-center">
-            <label htmlFor="root-note" className="text-xl font-bold mb-2 text-teal-300 flex items-center">
-              <Music2 className="mr-2" /> Nota Raíz
-            </label>
-            <div className="relative w-full">
-              <select
-                id="root-note"
-                value={selectedRoot}
-                onChange={(e) => setSelectedRoot(e.target.value)}
-                className="w-full bg-gray-700 text-white border-none rounded-xl p-3 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer"
-              >
-                {NOTES.map((note) => (
-                  <option key={note} value={note}>
-                    {note}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
-                <ChevronDown size={20} />
-              </div>
-            </div>
-          </div>
-
-          {/* Selector de Tipo de Acorde */}
-          <div className="flex flex-col items-center">
-            <label htmlFor="chord-type" className="text-xl font-bold mb-2 text-teal-300 flex items-center">
-              <Scale className="mr-2" /> Tipo de Acorde
-            </label>
-            <div className="relative w-full">
-              <select
-                id="chord-type"
-                value={selectedChordType}
-                onChange={(e) => setSelectedChordType(e.target.value)}
-                className="w-full bg-gray-700 text-white border-none rounded-xl p-3 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer"
-              >
-                {Object.keys(SCALE_RELATIONSHIPS).map((type) => (
-                  <option key={type} value={type}>
-                    {SCALE_RELATIONSHIPS[type].title}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
-                <ChevronDown size={20} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sección de Resultados */}
-        <div className="bg-gray-700 p-6 rounded-2xl mt-8 shadow-inner animate-slide-up">
-          <div className="flex justify-center items-center mb-4 space-x-2">
-            <h2 className="text-3xl font-extrabold text-white">
-              {selectedRoot}
-              {relationship.title.slice(1)}
-            </h2>
-          </div>
-          <p className="text-center text-lg text-gray-300 mb-4 font-semibold">
-            Acorde: <span className="font-mono text-xl text-yellow-300">{chordNotes.join(', ')}</span>
-          </p>
-          
-          <hr className="border-gray-600 my-4" />
-          
-          <p className="text-center text-lg text-gray-300 mb-2">
-            Usa la escala:
-          </p>
-          <p className="text-center text-2xl font-bold text-blue-300 mb-2">
-            {getEnharmonicNote(melodicMinorRootNote)} menor melódica
-          </p>
-          <p className="text-center text-sm text-gray-400 italic">
-            ({relationship.relation})
-          </p>
-          <div className="flex justify-center flex-wrap gap-4 mt-4">
-            {melodicMinorNotes.map((note, index) => (
-              <div key={index} className="flex flex-col items-center p-2 rounded-lg border-2 border-transparent">
-                <span className="font-mono text-2xl font-bold text-green-300">{note}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Sección de Lick Aleatorio */}
-        <div className="bg-gray-700 p-6 rounded-2xl mt-8 shadow-inner animate-slide-up">
-          <div className="flex justify-center items-center mb-4 space-x-2">
-            <h3 className="text-3xl font-extrabold text-white">
-              Lick Aleatorio
-            </h3>
-          </div>
-          <div className="flex justify-center mb-4 space-x-4">
-            <button
-              onClick={generateLick}
-              disabled={isLickPlaying}
-              className={`flex items-center px-4 py-2 rounded-full transition-all duration-300 ${
-                isLickPlaying ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 text-white'
-              } focus:outline-none focus:ring-2 focus:ring-purple-400`}
-            >
-              <Dice3 size={20} className="mr-2"/> Generar Nuevo Lick
-            </button>
-            <button
-              onClick={saveCurrentLick}
-              disabled={randomLick.length === 0}
-              className={`flex items-center px-4 py-2 rounded-full transition-all duration-300 ${
-                randomLick.length === 0 ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700 text-white'
-              } focus:outline-none focus:ring-2 focus:ring-teal-400`}
-            >
-              <Save size={20} className="mr-2"/> Guardar Lick
-            </button>
-          </div>
-          
-          {randomLick.length > 0 && (
-            <>
-              <div className="flex justify-center flex-wrap gap-4 mt-4">
-                {randomLick.map((note, index) => (
-                  <div key={index} 
-                    className={`flex flex-col items-center p-2 rounded-lg border-2 transition-all duration-300 ${
-                      isLickPlaying && currentLickPlaying === null && currentPlayingNoteIndex === index
-                        ? 'border-yellow-300 shadow-md shadow-yellow-500 animate-pulse'
-                        : 'border-transparent'
-                    }`}
-                  >
-                    <span className="font-mono text-2xl font-bold text-yellow-300">{note}</span>
-                    <span className="text-sm text-gray-400">{randomLickIntervals[index]}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-center mt-4">
-                <button
-                  onClick={() => playLick(randomLick)}
-                  className={`flex items-center px-4 py-2 rounded-full transition-all duration-300 ${
-                    isLickPlaying && currentLickPlaying === null ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-pink-600 hover:bg-pink-700 text-white'
-                  } focus:outline-none focus:ring-2 focus:ring-pink-400`}
-                >
-                  {isLickPlaying && currentLickPlaying === null ? <StopCircle size={20} className="mr-2"/> : <Play size={20} className="mr-2"/>}
-                  {isLickPlaying && currentLickPlaying === null ? 'Detener Lick' : 'Tocar Lick'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Sección de Licks Guardados */}
-        {savedLicks.length > 0 && (
-          <div className="bg-gray-700 p-6 rounded-2xl mt-8 shadow-inner animate-slide-up">
-            <h3 className="text-3xl font-extrabold text-white text-center mb-4">
-              Licks Guardados
-            </h3>
-            <div className="flex flex-col space-y-6">
-              {savedLicks.map((lick, lickIndex) => (
-                <div key={lickIndex} className="bg-gray-800 p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between shadow-md">
-                  <div className="flex-grow">
-                    <p className="text-lg font-bold text-teal-300 mb-2">
-                      {lick.root}
-                      {SCALE_RELATIONSHIPS[lick.chord].title.slice(1)} Lick
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {lick.notes.map((note, noteIndex) => (
-                        <div key={noteIndex}
-                          className={`flex flex-col items-center p-1 rounded-md border-2 transition-all duration-300 ${
-                            isLickPlaying && currentLickPlaying === lickIndex && currentPlayingNoteIndex === noteIndex
-                              ? 'border-yellow-300 shadow-md shadow-yellow-500 animate-pulse'
-                              : 'border-transparent'
-                          }`}
-                        >
-                          <span className="font-mono text-xl text-yellow-300">{note}</span>
-                          <span className="text-xs text-gray-400">{lick.intervals[noteIndex]}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex space-x-2 mt-4 md:mt-0">
-                    <button
-                      onClick={() => playLick(lick.notes, lickIndex)}
-                      className={`p-3 rounded-full transition-all duration-300 ${
-                        isLickPlaying && currentLickPlaying === lickIndex ? 'bg-red-600 hover:bg-red-700' : 'bg-pink-600 hover:bg-pink-700'
-                      } text-white focus:outline-none focus:ring-2 focus:ring-pink-400`}
-                    >
-                      {isLickPlaying && currentLickPlaying === lickIndex ? <StopCircle size={20} /> : <Play size={20} />}
-                    </button>
-                    <button
-                      onClick={() => deleteSavedLick(lickIndex)}
-                      className="p-3 bg-red-600 hover:bg-red-700 text-white rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-red-400"
-                    >
-                      <Trash2 size={20} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        {/* Créditos del desarrollador */}
-        <div className="mt-8 text-center text-gray-500 text-sm">
-          <p>Creado por Juan Miguel Rios Redondo</p>
-        </div>
-
-      </div>
-      <style>
-        {`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(-20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in {
-          animation: fadeIn 0.6s ease-out;
-        }
-        .animate-slide-up {
-          animation: slideUp 0.6s ease-out 0.2s forwards;
-          opacity: 0;
-        }
-        .animate-pulse {
-            animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-        @keyframes pulse {
-            0%, 100% {
-                border-color: #fcd34d;
-                box-shadow: 0 0 5px #fcd34d;
-            }
-            50% {
-                border-color: rgba(252, 211, 77, 0.4);
-                box-shadow: 0 0 15px rgba(252, 211, 77, 0.8);
-            }
-        }
-        `}
-      </style>
-    </div>
-  );
-}
+  </script>
+</body>
+</html>
