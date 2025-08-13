@@ -50,7 +50,6 @@
     }
   </style>
 </head>
-<!-- He eliminado 'justify-center' y 'min-h-screen' para permitir el desplazamiento vertical y he añadido más padding al final. -->
 <body class="bg-gray-900 text-white flex flex-col items-center p-4 pb-12">
   <div class="bg-gray-800 shadow-2xl rounded-3xl p-8 max-w-4xl w-full flex flex-col space-y-8 animate-fade-in">
     <h1 class="text-4xl font-extrabold text-center text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500 mb-2">
@@ -104,6 +103,16 @@
           Lick Aleatorio
         </h3>
       </div>
+
+      <!-- Control deslizante para la longitud del lick -->
+      <div class="mb-6 w-full flex flex-col items-center">
+        <label for="lick-length-slider" class="text-lg font-semibold mb-2 text-gray-300 flex items-center">
+          <i data-lucide="grip-lines" class="mr-2"></i> Notas en el lick: <span id="lick-length-value" class="font-mono text-yellow-300 ml-2">4</span>
+        </label>
+        <!-- Rango del slider ajustado de 1 a 7 -->
+        <input type="range" id="lick-length-slider" min="1" max="7" value="4" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer range-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      
       <div class="flex flex-wrap justify-center gap-4 mb-4">
         <button id="generate-lick-btn" class="flex items-center px-4 py-2 rounded-full transition-all duration-300 bg-purple-600 hover:bg-purple-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-400">
           <i data-lucide="dice-3" class="mr-2"></i> Generar Nuevo Lick
@@ -388,7 +397,8 @@
       if (melodicMinorNotes.length === 0) return;
       
       const availableNotes = [...melodicMinorNotes];
-      const lickLength = Math.floor(Math.random() * 5) + 4;
+      // Obtener el valor del slider para la longitud del lick
+      const lickLength = parseInt(document.getElementById('lick-length-slider').value, 10);
       
       randomLick = [];
       randomLickIntervals = [];
@@ -621,6 +631,18 @@
       chordSelect.addEventListener('change', () => {
         updateScaleAndChordDisplay(rootSelect.value, chordSelect.value);
         generateLick();
+      });
+
+      // Añadir listeners para el nuevo slider de longitud de lick
+      const lickLengthSlider = document.getElementById('lick-length-slider');
+      const lickLengthValue = document.getElementById('lick-length-value');
+      
+      // Sincronizar el valor inicial
+      lickLengthValue.textContent = lickLengthSlider.value;
+
+      lickLengthSlider.addEventListener('input', () => {
+        lickLengthValue.textContent = lickLengthSlider.value;
+        generateLick(); // Genera un nuevo lick cada vez que se mueve el slider
       });
 
       // Añadir listeners para los botones de la sección de lick aleatorio
