@@ -50,7 +50,8 @@
     }
   </style>
 </head>
-<body class="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
+<!-- He eliminado 'justify-center' y 'min-h-screen' para permitir el desplazamiento vertical y he añadido más padding al final. -->
+<body class="bg-gray-900 text-white flex flex-col items-center p-4 pb-12">
   <div class="bg-gray-800 shadow-2xl rounded-3xl p-8 max-w-4xl w-full flex flex-col space-y-8 animate-fade-in">
     <h1 class="text-4xl font-extrabold text-center text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500 mb-2">
       Laboratorio de la Escala Menor Melódica
@@ -103,7 +104,7 @@
           Lick Aleatorio
         </h3>
       </div>
-      <div class="flex justify-center mb-4 space-x-4">
+      <div class="flex flex-wrap justify-center gap-4 mb-4">
         <button id="generate-lick-btn" class="flex items-center px-4 py-2 rounded-full transition-all duration-300 bg-purple-600 hover:bg-purple-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-400">
           <i data-lucide="dice-3" class="mr-2"></i> Generar Nuevo Lick
         </button>
@@ -331,7 +332,7 @@
               `).join('')}
             </div>
           </div>
-          <div class="flex space-x-2 mt-4 md:mt-0">
+          <div class="flex flex-wrap space-x-2 mt-4 md:mt-0 justify-end">
             <button id="play-saved-lick-btn-${lickIndex}" class="p-3 rounded-full transition-all duration-300 bg-pink-600 hover:bg-pink-700 text-white focus:outline-none focus:ring-2 focus:ring-pink-400">
               <i data-lucide="play" class="play-icon"></i>
               <i data-lucide="stop-circle" class="stop-icon hidden"></i>
@@ -639,3 +640,5 @@
   </script>
 </body>
 </html>
+
+
