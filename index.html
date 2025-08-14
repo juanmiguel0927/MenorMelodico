@@ -173,12 +173,14 @@
       'm7(b5)': [0, 3, 6, 10],
     };
     const SCALE_RELATIONSHIPS = {
-      maj7: { relation: 'escala menor melódica sobre la 6ta', offset: 9, title: 'Xmaj7' },
-      m7: { relation: 'escala menor melódica sobre la raíz', offset: 0, title: 'Xm7' },
-      '7(b9)': { relation: 'escala menor melódica sobre la b7', offset: 10, title: 'X7(b9)' },
-      '7(Alt)': { relation: 'escala menor melódica sobre la b2', offset: 1, title: 'X7(Alt)' },
-      '7(#11)': { relation: 'escala menor melódica sobre la 5 justa', offset: 7, title: 'X7(#11)' },
-      'm7(b5)': { relation: 'escala menor melódica sobre el b3', offset: 3, title: 'Xm7(b5)' },
+      // Modos de la escala menor melódica y su relación con los acordes
+      // Actualizado para incluir el número de modo
+      maj7: { relation: 'Lidio #5', offset: 9, title: 'Xmaj7', mode: '3er' },
+      m7: { relation: 'Dorico becuadro 7', offset: 0, title: 'Xm7', mode: '1er' },
+      '7(b9)': { relation: 'Frigio becuadro 6', offset: 10, title: 'X7(b9)', mode: '2do' },
+      '7(Alt)': { relation: 'Mixolidia alterada', offset: 1, title: 'X7(Alt)', mode: '7mo' },
+      '7(#11)': { relation: 'Mixolidio #11 / Lidio b7', offset: 7, title: 'X7(#11)', mode: '4to' },
+      'm7(b5)': { relation: 'Locrio becuadro 9', offset: 3, title: 'Xm7(b5)', mode: '6to' },
     };
     const MELODIC_MINOR_FORMULA = [0, 2, 3, 5, 7, 9, 11];
     const KEY_NOTE_MAP = {
@@ -210,10 +212,16 @@
       maj7: { 0: '1', 2: '9', 4: '11', 6: '#11', 8: '#5', 9: '13', 11: '7' },
       m7: { 0: '1', 2: '9', 3: 'b3', 5: '11', 7: '5', 9: '13', 11: '7' },
       '7(b9)': { 0: '1', 1: 'b9', 3: '#9', 5: '11', 7: '5', 9: '13', 10: 'b7' },
-      // Corregido: b6 se cambia a b13
-      '7(Alt)': { 0: '1', 1: 'b9', 3: '#9', 4: '11', 6: 'b5', 8: 'b13', 10: 'b7' },
-      '7(#11)': { 0: '1', 2: '9', 4: '11', 6: '#11', 7: '5', 9: '13', 10: 'b7' },
-      // Corregido: b6 se cambia a b13
+      '7(Alt)': {
+        0: '1', 1: 'b9', 3: '#9', 
+        4: '3', 
+        6: 'b5', 8: 'b13', 10: 'b7' 
+      },
+      '7(#11)': { 
+        0: '1', 2: '9', 
+        4: '3', 
+        6: '#11', 7: '5', 9: '13', 10: 'b7' 
+      },
       'm7(b5)': { 0: '1', 2: '9', 3: 'b3', 5: '11', 6: 'b5', 8: 'b13', 10: 'b7' }
     };
     const ENHARMONIC_MAP = { 'Fb': 'E', 'Cb': 'B', 'E#': 'F', 'B#': 'C' };
@@ -265,8 +273,6 @@
       const resultsSection = document.getElementById('results-section');
       
       // Building the HTML for the new scale design.
-      // We use flex-1 on the note divs to make them take up equal space and avoid horizontal scrolling.
-      // Reduced font size and padding to fit better on small screens
       const scaleNotesHtml = melodicMinorNotes.map((note, index) => `
         <div class="flex-1 bg-gray-800 p-2 rounded-xl flex flex-col items-center justify-center shadow-lg mx-1">
           <span class="font-mono text-xl font-bold text-teal-300">${note}</span>
@@ -288,10 +294,10 @@
           Usa la escala:
         </p>
         <p class="text-center text-2xl font-bold text-blue-300 mb-2">
-          ${getEnharmonicNote(melodicMinorRootNote)} menor melódica
+          ${getEnharmonicNote(selectedRoot)} ${relationship.relation}
         </p>
         <p class="text-center text-sm text-gray-400 italic">
-          (${relationship.relation})
+          (Es el ${relationship.mode} modo de la escala ${getEnharmonicNote(melodicMinorRootNote)} menor melódica)
         </p>
         <div class="flex flex-row justify-center gap-1 mt-4">
           ${scaleNotesHtml}
@@ -312,11 +318,11 @@
       }
 
       // Estilos ajustados para que las notas del lick aleatorio se vean como las de la escala.
-      // Usamos flex-1, p-2 y los mismos tamaños de fuente.
+      // Se eliminó la clase 'flex-1' y se cambió por un 'w-20' fijo
       lickDisplay.innerHTML = `
         <div class="flex flex-row justify-center gap-1 mt-4" id="random-lick-notes-container">
           ${randomLick.map((note, index) => `
-            <div id="random-note-${index}" class="flex-1 bg-gray-800 p-2 rounded-xl flex flex-col items-center justify-center border-2 transition-all duration-300 border-transparent shadow-lg">
+            <div id="random-note-${index}" class="w-20 bg-gray-800 p-2 rounded-xl flex flex-col items-center justify-center border-2 transition-all duration-300 border-transparent shadow-lg mx-1">
               <span class="font-mono text-xl font-bold text-yellow-300">${note}</span>
               <span class="text-xs text-gray-400 font-mono">${randomLickIntervals[index]}</span>
             </div>
@@ -356,10 +362,11 @@
               ${lick.root}${SCALE_RELATIONSHIPS[lick.chord].title.slice(1)} Lick
             </p>
             <!-- Ajustado para usar flex-row y gap-1 para que se vea como la escala -->
-            <div id="saved-lick-notes-${lickIndex}" class="flex flex-row flex-wrap gap-1">
+            <div id="saved-lick-notes-${lickIndex}" class="flex flex-row flex-wrap gap-1 justify-center">
               ${lick.notes.map((note, noteIndex) => `
-                <div id="saved-note-${lickIndex}-${noteIndex}" class="flex-1 bg-gray-700 p-2 rounded-lg flex flex-col items-center justify-center border-2 transition-all duration-300 border-transparent">
-                  <span class="font-mono text-xl text-yellow-300">${note}</span>
+                <!-- Se eliminó la clase 'flex-1' y se cambió por un 'w-20' fijo -->
+                <div id="saved-note-${lickIndex}-${noteIndex}" class="w-20 bg-gray-800 p-2 rounded-xl flex flex-col items-center justify-center border-2 transition-all duration-300 border-transparent shadow-lg mx-1">
+                  <span class="font-mono text-xl font-bold text-yellow-300">${note}</span>
                   <span class="text-xs text-gray-400 font-mono">${lick.intervals[noteIndex]}</span>
                 </div>
               `).join('')}
@@ -686,4 +693,3 @@
   </script>
 </body>
 </html>
-
